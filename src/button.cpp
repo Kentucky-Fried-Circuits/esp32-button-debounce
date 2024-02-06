@@ -31,7 +31,7 @@ std::vector<uint8_t> vec;
 
 static void update_button(debounce_t *d)
 {
-    d->history = (d->history << 1) | gpio_get_level((gpio_num_t )d->pin);
+    d->history = (d->history << 1) | gpio_get_level((gpio_num_t)d->pin);
 }
 
 #define MASK 0b1111000000111111
@@ -107,7 +107,7 @@ static void button_task(void *pvParameter)
                 send_event(debounce[idx], BUTTON_DOWN);
             }
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 
@@ -127,11 +127,15 @@ bool pulled_button_init(unsigned long long pin_select, gpio_pull_mode_t pull_mod
             vec.push_back(pin_select);
 
             // Configure the pins
-            gpio_config_t io_conf;
-            io_conf.intr_type = GPIO_INTR_NEGEDGE;
-            io_conf.mode = GPIO_MODE_INPUT;
-            io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+            gpio_config_t io_conf = {};
+            io_conf.intr_type = GPIO_INTR_NEGEDGE; // TEST - digitalRead works GPIO_INTR_NEGEDGE
             io_conf.pin_bit_mask = (1ULL << pin_select);
+            // set as input mode
+            io_conf.mode = GPIO_MODE_INPUT;
+            // enable pull-up mode
+            io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+            io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+
             gpio_config(&io_conf);
 
             return true;
@@ -143,13 +147,13 @@ bool pulled_button_init(unsigned long long pin_select, gpio_pull_mode_t pull_mod
 QueueHandle_t button_begin()
 {
     // Initialize global state and queue
-    debounce = (debounce_t*)calloc(pin_count, sizeof(debounce_t));
+    debounce = (debounce_t *)calloc(pin_count, sizeof(debounce_t));
 
     // Scan the pin map to determine each pin number, populate the state
     uint32_t idx = 0;
     for (auto &it : vec)
     {
-        ESP_LOGI(TAG, "Registering button input: %d", it);
+        ESP_LOGI(TAG, "Registering button input: %d, count is %d", it, pin_count);
         debounce[idx].pin = it;
         debounce[idx].down_time = 0;
         debounce[idx].inverted = true;
@@ -161,6 +165,17 @@ QueueHandle_t button_begin()
     queue = xQueueCreate(CONFIG_ESP32_BUTTON_QUEUE_SIZE, sizeof(button_event_t));
     // Spawn a task to monitor the pins
     xTaskCreate(&button_task, "button_task", CONFIG_ESP32_BUTTON_TASK_STACK_SIZE, NULL, 10, NULL);
+
+    // xTaskCreate([](void *param)
+    //             {
+    //                 debounce_t *d = (debounce_t *)param;
+    //                 while(1){
+    //                     for (int idx = 0; idx < pin_count; idx++)
+    // ESP_LOGI("debug","we are reading %d, pin num %llu, counter %d, current indx %d ",gpio_get_level((gpio_num_t)d[idx].pin), d[idx].pin, pin_count, idx);
+
+    // vTaskDelay(300);
+    //                 } },
+    //             "gpioPinTask", configMINIMAL_STACK_SIZE * 5, (void *)debounce, 5, NULL);
 
     return queue;
 }
